@@ -23,3 +23,8 @@ export async function assignBrokenPermits(rawFieldName: string, fieldId: string,
   query = allMatching ? query.is("field_id", null).ilike("raw_field_name", rawFieldName) : query.eq("id", permitId ?? "");
   const { error } = await query; if (error) throw error;
 }
+/** Point specific permits at a field. The caller picks the ids, so "apply to all with this raw name" stays scoped to the active version. */
+export async function assignPermitsToField(permitIds: string[], fieldId: string): Promise<void> {
+  if (!permitIds.length) return;
+  const { error } = await requireSupabase().from("permits").update({ field_id: fieldId, updated_at: new Date().toISOString() }).in("id", permitIds); if (error) throw error;
+}

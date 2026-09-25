@@ -4,6 +4,7 @@ import { FieldMap } from "../components/map/FieldMap";
 import { PermitCalendar } from "../components/calendar/PermitCalendar";
 import { PermitSidebar } from "../components/sidebar/PermitSidebar";
 import { PermitImportToolbar } from "../components/permits/PermitImportToolbar";
+import { VersionMenu } from "../components/versions/VersionMenu";
 import { computeConflicts } from "../logic/conflicts";
 import { canEdit, describeBrowser, editLock } from "../data/lock";
 import { useEditLock } from "../components/lock/useEditLock";
@@ -136,7 +137,7 @@ export function MainApp({ user }: { user: User }) {
     <header className="topbar">
       <strong>Field Permit Scheduler</strong>
       <span className="account-name">{username}</span>
-      <button disabled title="Version management is coming in Phase 3A">Version: {activeVersion.name}</button>
+      <VersionMenu versions={versions} activeVersionId={activeVersion.id} readOnly={!canEdit()} onChanged={reloadWorkspace} />
       <button type="button" className={editMode ? "primary" : ""} aria-pressed={editMode} onClick={toggleEdit} disabled={lock.mode === "acquiring"}>{lock.mode === "acquiring" ? "Starting…" : editMode ? "Done editing" : "Edit mode"}</button>
       <PermitImportToolbar fields={fields} permits={permits} activeVersion={activeVersion} onChanged={reloadWorkspace} />
       <button onClick={() => setShowExport(true)}>Export</button>

@@ -1,0 +1,50 @@
+.permit-calendar { position: fixed; z-index: 20; inset: 0; display: flex; flex-direction: column; background: white; }
+.permit-calendar__bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .9rem; border-bottom: 1px solid #dce2e8; }
+.permit-calendar__back { font-weight: 600; }
+.permit-calendar__bar h2 { margin: 0; font-size: 1.2rem; }
+.permit-calendar__subtitle { font-weight: 400; color: #596673; }
+.permit-calendar__legend { display: flex; gap: 1rem; margin: 0 0 0 auto; padding: 0; list-style: none; font-size: .85rem; color: #3d4a57; }
+.permit-calendar__legend li { display: flex; align-items: center; gap: .35rem; }
+.swatch { display: inline-block; width: 1.4rem; height: .95rem; border-radius: 3px; }
+.swatch--normal { background: var(--cal-normal); }
+.swatch--conflict { background: var(--cal-conflict); outline: 2px dashed #1b1b1b; outline-offset: -2px; }
+.swatch--other { background: repeating-linear-gradient(135deg, #ffffff 0 4px, #dfe6ea 4px 8px); border: 2px solid var(--cal-normal); }
+.permit-calendar__hint { margin: 0; padding: .35rem .9rem; font-size: .85rem; color: #3d4a57; background: #f3f6f8; }
+.permit-calendar__notice { min-height: 0; display: flex; align-items: center; gap: .5rem; padding: 0 .9rem; font-size: .9rem; }
+.permit-calendar__notice.is-info, .permit-calendar__notice.is-error { padding: .4rem .9rem; }
+.permit-calendar__notice.is-info { background: #e8f3ee; color: #14553f; }
+.permit-calendar__notice.is-error { background: #fbeceb; color: #8e2a23; font-weight: 600; }
+.permit-calendar__dismiss, .permit-calendar__close { border: 0; background: transparent; padding: 0 .3rem; font-size: 1.2rem; line-height: 1; }
+.permit-calendar__body { flex: 1; min-height: 0; display: flex; }
+.permit-calendar__grid { flex: 1; min-width: 0; padding: .4rem .6rem .6rem; }
+.permit-calendar__details { position: relative; width: 300px; flex: none; overflow-y: auto; padding: 1rem; border-left: 1px solid #dce2e8; background: #fafbfc; }
+.permit-calendar__close { position: absolute; top: .6rem; right: .5rem; }
+.permit-calendar__details h3 { margin: 0 1.5rem .6rem 0; }
+.permit-calendar__details dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; margin: 0; }
+.permit-calendar__details dl > div { display: contents; }
+.permit-calendar__details dt { font-weight: 600; color: #596673; }
+.permit-calendar__details dd { margin: 0; }
+.permit-calendar__details h4 { margin: 1rem 0 .4rem; }
+.permit-calendar__details h4.has-conflicts { color: var(--cal-conflict); }
+.permit-calendar__conflicts { margin: 0; padding-left: 1.1rem; color: #8e2a23; }
+.permit-calendar__conflicts li + li { margin-top: .35rem; }
+
+/* Events: this field = solid normal color; overlapping field = striped and outlined; conflict = conflict color with a thick dashed border (color-blind cue, SPEC 6.1). */
+.permit-calendar .fc-timegrid-event.permit-event { border-width: 2px; border-radius: 4px; cursor: pointer; }
+.permit-calendar .permit-event.is-normal { background: var(--cal-normal); border-color: var(--cal-normal); color: white; }
+.permit-calendar .permit-event.is-conflict { background: var(--cal-conflict); border: 3px dashed #1b1b1b; color: white; }
+.permit-calendar .permit-event.is-other-field { background: repeating-linear-gradient(135deg, #ffffff 0 6px, #e3e9ec 6px 12px); color: #1f2b36; }
+.permit-calendar .permit-event.is-other-field.is-normal { border: 2px solid var(--cal-normal); }
+.permit-calendar .permit-event.is-other-field.is-conflict { background: repeating-linear-gradient(135deg, #f7dcd9 0 6px, #eab6b1 6px 12px); border: 3px dashed var(--cal-conflict); color: #5d1712; }
+.permit-calendar .permit-event .fc-event-main { color: inherit; padding: 1px 3px; overflow: hidden; }
+.permit-event__content { height: 100%; display: flex; flex-direction: column; overflow: hidden; line-height: 1.2; font-size: .8rem; }
+.permit-event__content > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.permit-event__field { font-style: italic; font-weight: 600; }
+.permit-calendar .fc-col-header-cell-cushion { font-weight: 600; color: #24313e; }
+.permit-calendar .fc-event-dragging { opacity: .85; }
+
+@media (max-width: 900px) {
+  .permit-calendar__legend { margin-left: 0; }
+  .permit-calendar__body { flex-direction: column; }
+  .permit-calendar__details { width: auto; max-height: 40%; border-left: 0; border-top: 1px solid #dce2e8; }
+}

@@ -25,7 +25,7 @@ Primary users: the staff member's boss (account owner/editor), supervisors and p
 - **Excel:** `exceljs` for both generating the template (it supports data-validation dropdowns) and parsing uploads.
 - **Backend:** Supabase (Postgres, Auth, Row Level Security, one Edge Function for signup).
 - **Tests:** Vitest for all pure logic modules.
-- **Secrets:** Supabase URL and anon key are injected at build time via GitHub Actions secrets as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The anon key is public by design; all protection comes from RLS. The service role key must never appear in frontend code or the repo.
+- **Secrets:** Supabase URL and publishable key are injected at build time via GitHub Actions secrets as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. The publishable key is public by design; all protection comes from RLS. The secret/service-role key must never appear in frontend code or the repo.
 
 ## 3. Core concepts and data model
 

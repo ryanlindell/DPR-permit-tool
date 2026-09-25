@@ -29,6 +29,8 @@ export interface PermitCalendarProps {
   editable: boolean;
   /** Close calendar and return to map while retaining selected field. */
   onBack: () => void;
+  /** Optional phase integration control for entering or leaving edit mode. */
+  onToggleEdit?: () => void;
   /** Emit a changed complete permit; caller validates and persists it. */
   onPermitChange: (updated: Permit) => void | Promise<void>;
   /** Optional event selection callback for a detail panel. */
@@ -48,7 +50,7 @@ type Notice = { tone: "info" | "error"; text: string } | null;
  * come from the `permits` prop. When the caller applies the change the event re-renders in its new
  * place; when it does not, the event stays where it was.
  */
-export function PermitCalendar({ permits, fields, selectedFieldId, conflictingPermitIds, conflictsByPermit, editable, onBack, onPermitChange, onPermitSelect }: PermitCalendarProps) {
+export function PermitCalendar({ permits, fields, selectedFieldId, conflictingPermitIds, conflictsByPermit, editable, onBack, onToggleEdit, onPermitChange, onPermitSelect }: PermitCalendarProps) {
   const [selectedPermitId, setSelectedPermitId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
@@ -88,6 +90,7 @@ export function PermitCalendar({ permits, fields, selectedFieldId, conflictingPe
       <header className="permit-calendar__bar">
         <button className="permit-calendar__back" onClick={onBack}>← Back</button>
         <h2 id="permit-calendar-title">{selectedField?.name ?? "Field"}<span className="permit-calendar__subtitle"> weekly schedule{editable ? " (editing)" : ""}</span></h2>
+        {onToggleEdit && <button type="button" className={editable ? "primary" : ""} aria-pressed={editable} onClick={onToggleEdit}>{editable ? "Done editing" : "Edit permits"}</button>}
         <ul className="permit-calendar__legend" aria-label="Legend">
           <li><span className="swatch swatch--normal" />This field</li>
           <li><span className="swatch swatch--other" />Overlapping field</li>

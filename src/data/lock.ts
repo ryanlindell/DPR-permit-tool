@@ -1,4 +1,8 @@
 import { requireSupabase } from "./supabaseClient";
+
+/** Phase 2 allows all signed-in sessions to edit; Phase 3B replaces this with lock ownership. */
+export function canEdit(): boolean { return true; }
+
 export interface EditLock { owner_id: string; session_id: string; holder_label: string; heartbeat_at: string; }
 export async function getEditLock(): Promise<EditLock | null> {
   const { data, error } = await requireSupabase().from("edit_locks").select("*").maybeSingle(); if (error) throw error; return data as EditLock | null;

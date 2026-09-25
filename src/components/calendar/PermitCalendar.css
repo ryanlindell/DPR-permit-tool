@@ -1,4 +1,4 @@
-.permit-calendar { position: fixed; z-index: 20; inset: 0; display: flex; flex-direction: column; background: white; }
+.permit-calendar { position: fixed; z-index: 3000; inset: 0; display: flex; flex-direction: column; background: white; }
 .permit-calendar__bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .9rem; border-bottom: 1px solid #dce2e8; }
 .permit-calendar__back { font-weight: 600; }
 .permit-calendar__bar h2 { margin: 0; font-size: 1.2rem; }

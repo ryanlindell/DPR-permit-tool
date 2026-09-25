@@ -20,7 +20,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .map-placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: #657481; background: #e9eef1; }
 .component-placeholder { padding: 2rem; color: #657481; background: white; border: 1px dashed #aeb9c3; border-radius: 6px; }
 .loading { padding: 2rem; }
-.modal-backdrop { position: fixed; z-index: 5; inset: 0; display: grid; place-items: center; background: #17232f66; }
+.modal-backdrop { position: fixed; z-index: 2000; inset: 0; display: grid; place-items: center; background: #17232f66; }
 .export-dialog { width: min(420px, calc(100% - 32px)); padding: 1.5rem; background: white; border-radius: 8px; box-shadow: 0 12px 40px #0003; }
 .export-dialog h2 { margin-top: 0; }
 @media (max-width: 900px) { .topbar { flex-wrap: wrap; } .topbar strong { width: 100%; } .workspace { min-height: 65vh; } }

@@ -45,7 +45,7 @@ Primary users: the staff member's boss (account owner/editor), supervisors and p
 | `field_overlaps` | `owner_id`, `field_a`, `field_b` | Cached adjacency, stored with `field_a < field_b`. See 4.2. |
 | `versions` | `id`, `name`, `created_at` | Named saves of the permit schedule. |
 | `permits` | `id`, `version_id`, `organization`, `field_id` (nullable), `raw_field_name`, `start_time time`, `end_time time`, `days smallint[]`, `notes`, `extra jsonb`, `import_batch_id`, timestamps | `field_id` null = broken permit. Days use 0=Sun ... 6=Sat. |
-| `edit_locks` | `owner_id` (pk), `session_id`, `holder_label`, `heartbeat_at` | See 6.3. |
+| `edit_locks` | `(owner_id, version_id)` (pk), `session_id`, `holder_label`, `heartbeat_at` | One editor per version; see 6.3. |
 
 **Times are wall-clock values (`time`, "HH:MM"), never timestamps.** A permit is a weekly recurring slot, not an event on a date, so storing timezone-aware timestamps would only introduce bugs.
 
@@ -133,9 +133,9 @@ A "Broken permits (N)" button, visible whenever N > 0, opens a list of unmatched
 - Changes save to Supabase immediately (optimistic UI, revert with an error toast on failure). No undo/redo.
 
 ### 5.7 Versions ("saves")
-- Works like save slots in a game: there is always one active version, and all viewing and editing happens on it. Edits autosave into the active version.
-- Version menu: shows active version name; "Save as new version" (copies all permits of the active version into a new named version and switches to it); switch to another version; rename; delete (not allowed for the active version, confirmation required).
-- Fields are not versioned.
+- Each browser session displays its own selected version, so changing versions in one tab does not change what another tab is viewing. The account's `active_version_id` is the default for new sessions and the version shown by public share links.
+- Version menu: shows the displayed version name; "Save as new version" (copies all permits of the displayed version into a new named version and displays it here); switch the displayed version; rename; delete (not allowed for the displayed version, confirmation required).
+- Permit edits autosave into the displayed version. Fields are not versioned, so field names and shapes are shared across every version.
 
 ### 5.8 Sharing
 - Settings toggle "Enable share link" and a copy-link button for `#/share/<share_token>`. "Regenerate link" issues a new token (old link stops working).
@@ -153,8 +153,9 @@ Clean, readable, works on a laptop and a projector (1280x720 minimum). Mobile is
 ### 6.2 Errors and loading
 Every network call shows loading state and a human-readable error. No silent failures.
 
-### 6.3 Edit lock (one editor at a time)
-- On entering edit mode, the client tries to acquire `edit_locks` for the account: succeeds if no row exists or `heartbeat_at` is older than 2 minutes. Use an atomic Postgres function (`acquire_edit_lock(session_id, label)`) so two clients cannot both win.
+### 6.3 Edit lock (one editor per version)
+- On entering edit mode, the client tries to acquire `edit_locks` for the displayed version: succeeds if no row exists or `heartbeat_at` is older than 2 minutes. Use an atomic Postgres function (`acquire_edit_lock(session_id, version_id, label)`) so two clients cannot both win for the same version.
+- Sessions editing different versions may edit their permits simultaneously. Field names and shapes are shared across versions, so field edits affect all versions; avoid editing the same field data from different sessions at once.
 - The holder sends a heartbeat every 30 seconds and releases the lock on leaving edit mode or closing the tab (best effort).
 - Other sessions on the same account see a read-only banner: "Being edited on another device since HH:MM", with a "Take over editing" button that forcibly acquires the lock after confirmation. The displaced session drops to read-only on its next heartbeat.
 

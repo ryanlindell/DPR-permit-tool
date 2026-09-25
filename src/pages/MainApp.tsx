@@ -1,5 +1,5 @@
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FieldMap } from "../components/map/FieldMap";
 import { PermitCalendar } from "../components/calendar/PermitCalendar";
 import { PermitSidebar } from "../components/sidebar/PermitSidebar";
@@ -14,8 +14,8 @@ import { deletePermit, listPermits, updatePermit } from "../data/permits";
 import { listFields, listFieldOverlaps } from "../data/fields";
 import { getSettings, updateSettings } from "../data/settings";
 import { listVersions } from "../data/versions";
-import { requireSupabase } from "../data/supabaseClient";
-import { syncOverlapsForField } from "../components/map/overlapSync";
+import { signOut } from "../data/auth";
+import { recomputeAllFieldOverlaps, syncOverlapsForField } from "../components/map/overlapSync";
 import type { AccountSettings, Field, FieldOverlap, Permit, Version } from "../types";
 
 export function MainApp({ user }: { user: User }) {
@@ -23,13 +23,16 @@ export function MainApp({ user }: { user: User }) {
   const [overlaps, setOverlaps] = useState<FieldOverlap[]>([]);
   const [permits, setPermits] = useState<Permit[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const selectedVersionIdRef = useRef<string | null>(null);
   const [settings, setSettings] = useState<AccountSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
-  // Edit mode is holding the account's edit lock (SPEC 6.3); canEdit() reads the same state.
-  const lock = useEditLock(describeBrowser(navigator.userAgent));
+  const displayVersionId = selectedVersionId ?? settings?.active_version_id ?? null;
+  // Permit editing is coordinated independently for each displayed version.
+  const lock = useEditLock(displayVersionId, describeBrowser(navigator.userAgent));
   const editMode = lock.mode === "editing";
   const toggleEdit = useCallback(() => { void (editLock.getState().mode === "editing" ? editLock.stopEditing() : editLock.requestEdit()); }, []);
   const [showSettings, setShowSettings] = useState(false);
@@ -42,9 +45,13 @@ export function MainApp({ user }: { user: User }) {
     try {
       const nextSettings = await getSettings();
       const [nextFields, nextOverlaps, nextVersions] = await Promise.all([listFields(), listFieldOverlaps(), listVersions()]);
-      const activeVersion = nextVersions.find((version) => version.id === nextSettings.active_version_id);
-      if (!activeVersion) throw new Error("The active schedule version could not be found.");
-      const nextPermits = await listPermits(activeVersion.id);
+      const selectedIsValid = selectedVersionIdRef.current && nextVersions.some((version) => version.id === selectedVersionIdRef.current);
+      const nextVersionId = selectedIsValid ? selectedVersionIdRef.current! : nextSettings.active_version_id;
+      const displayedVersion = nextVersions.find((version) => version.id === nextVersionId);
+      if (!displayedVersion) throw new Error("The active schedule version could not be found.");
+      const nextPermits = await listPermits(displayedVersion.id);
+      selectedVersionIdRef.current = displayedVersion.id;
+      setSelectedVersionId(displayedVersion.id);
       setSettings(nextSettings);
       setFields(nextFields);
       setOverlaps(nextOverlaps);
@@ -61,7 +68,7 @@ export function MainApp({ user }: { user: User }) {
 
   useEffect(() => { void reloadWorkspace().catch(() => undefined); }, [reloadWorkspace]);
 
-  const activeVersion = versions.find((version) => version.id === settings?.active_version_id) ?? null;
+  const activeVersion = versions.find((version) => version.id === displayVersionId) ?? null;
   const selectedField = fields.find((field) => field.id === selectedFieldId) ?? null;
   const conflictsByPermit = useMemo(() => computeConflicts(permits, overlaps), [permits, overlaps]);
   const conflictingFieldIds = useMemo(() => {
@@ -97,6 +104,20 @@ export function MainApp({ user }: { user: User }) {
   async function saveHomeView(center: { lat: number; lng: number }, zoom: number) {
     const saved = await updateSettings({ home_center: center, home_zoom: zoom });
     setSettings(saved);
+  }
+
+  async function handleSignOut() {
+    setActionError(null);
+    try { await signOut(); }
+    catch (error) { setActionError(`Could not sign out: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+
+  function selectDisplayedVersion(versionId: string) {
+    if (editLock.getState().mode === "acquiring") return;
+    if (editLock.getState().mode === "editing") void editLock.stopEditing();
+    selectedVersionIdRef.current = versionId;
+    setSelectedVersionId(versionId);
+    setLoading(true);
   }
 
   async function savePermitOptimistically(updated: Permit) {
@@ -137,12 +158,12 @@ export function MainApp({ user }: { user: User }) {
     <header className="topbar">
       <strong>Field Permit Scheduler</strong>
       <span className="account-name">{username}</span>
-      <VersionMenu versions={versions} activeVersionId={activeVersion.id} readOnly={!canEdit()} onChanged={reloadWorkspace} />
+      <VersionMenu versions={versions} activeVersionId={activeVersion.id} readOnly={!canEdit()} selectionDisabled={lock.mode === "acquiring"} onChanged={reloadWorkspace} onSelectVersion={selectDisplayedVersion} />
       <button type="button" className={editMode ? "primary" : ""} aria-pressed={editMode} onClick={toggleEdit} disabled={lock.mode === "acquiring"}>{lock.mode === "acquiring" ? "Starting…" : editMode ? "Done editing" : "Edit mode"}</button>
       <PermitImportToolbar fields={fields} permits={permits} activeVersion={activeVersion} onChanged={reloadWorkspace} />
       <button onClick={() => setShowExport(true)}>Export</button>
       <button onClick={() => setShowSettings(true)}>Settings</button>
-      <button onClick={() => void requireSupabase().auth.signOut()}>Sign out</button>
+      <button type="button" onClick={() => void handleSignOut()}>Sign out</button>
     </header>
     <EditLockBanner state={lock} />
     <main className="workspace">
@@ -182,7 +203,13 @@ export function MainApp({ user }: { user: User }) {
         onPermitChange={savePermitOptimistically}
       />}
     </main>
-    {showSettings && <SettingsDialog settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
+    {showSettings && <SettingsDialog
+      settings={settings}
+      onSettingsChange={setSettings}
+      canRecomputeOverlaps={canEdit()}
+      onRecomputeOverlaps={recomputeAllFieldOverlaps}
+      onClose={() => setShowSettings(false)}
+    />}
     {showExport && <div className="modal-backdrop" role="presentation" onClick={() => setShowExport(false)}><section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title" onClick={(event) => event.stopPropagation()}><h2 id="export-title">Export</h2><p>Export formats are coming soon.</p><button onClick={() => setShowExport(false)}>Close</button></section></div>}
   </div>;
 }

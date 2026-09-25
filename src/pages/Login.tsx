@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { isSupabaseConfigured, requireSupabase, getUsernameEmail } from "../data/supabaseClient";
+import { signInWithUsername } from "../data/auth";
+import { isSupabaseConfigured } from "../data/supabaseClient";
 
 export function Login() {
   const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(""); setBusy(true);
-    try { const { error: authError } = await requireSupabase().auth.signInWithPassword({ email: getUsernameEmail(username), password }); if (authError) throw authError; }
+    try { await signInWithUsername(username, password); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not sign in."); }
     finally { setBusy(false); }
   }

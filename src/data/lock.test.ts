@@ -7,28 +7,32 @@ import { EditLockController, describeBrowser, isLockFresh, type EditLock, type E
  * succeeds for the current holder. Several controllers can share one fake to act as browsers.
  */
 function fakeDatabase() {
-  let row: EditLock | null = null;
+  const rows = new Map<string, EditLock>();
   const now = () => new Date(Date.now()).toISOString();
   const stale = (lock: EditLock) => Date.now() - Date.parse(lock.heartbeat_at) >= 120_000;
   const api = (): EditLockApi & { releasedOnUnload: string[] } => ({
     releasedOnUnload: [],
-    async acquire(sessionId, label, force) {
+    async acquire(sessionId, versionId, label, force) {
+      let row = rows.get(versionId) ?? null;
       if (!row || row.session_id === sessionId || force || stale(row)) {
         const acquired_at = row?.session_id === sessionId ? row.acquired_at : now();
-        row = { owner_id: "u1", session_id: sessionId, holder_label: label, heartbeat_at: now(), acquired_at };
+        row = { owner_id: "u1", version_id: versionId, session_id: sessionId, holder_label: label, heartbeat_at: now(), acquired_at };
+        rows.set(versionId, row);
       }
       return row.session_id === sessionId;
     },
-    async heartbeat(sessionId) {
+    async heartbeat(sessionId, versionId) {
+      let row = rows.get(versionId) ?? null;
       if (row?.session_id !== sessionId) return false;
       row = { ...row, heartbeat_at: now() };
+      rows.set(versionId, row);
       return true;
     },
-    async release(sessionId) { if (row?.session_id === sessionId) row = null; },
-    async get() { return row; },
-    releaseOnUnload(sessionId) { this.releasedOnUnload.push(sessionId); },
+    async release(sessionId, versionId) { if (rows.get(versionId)?.session_id === sessionId) rows.delete(versionId); },
+    async get(versionId) { return rows.get(versionId) ?? null; },
+    releaseOnUnload(sessionId, versionId) { this.releasedOnUnload.push(`${sessionId}:${versionId}`); },
   });
-  return { api, row: () => row };
+  return { api, row: (versionId = "v1") => rows.get(versionId) ?? null };
 }
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
@@ -41,8 +45,8 @@ describe("EditLockController", () => {
     const db = fakeDatabase();
     const laptop = new EditLockController(db.api(), "laptop", 30_000);
     const office = new EditLockController(db.api(), "office", 30_000);
-    laptop.start("Chrome on Windows");
-    office.start("Safari on Mac");
+    laptop.start("v1", "Chrome on Windows");
+    office.start("v1", "Safari on Mac");
     await flush();
 
     expect(await laptop.requestEdit()).toBe(true);
@@ -51,15 +55,29 @@ describe("EditLockController", () => {
     expect(office.getState()).toMatchObject({ mode: "viewing", otherHolder: { session_id: "laptop", holder_label: "Chrome on Windows" } });
   });
 
+  it("allows simultaneous editing when browsers are working on different versions", async () => {
+    const db = fakeDatabase();
+    const first = new EditLockController(db.api(), "tab-a", 30_000);
+    const second = new EditLockController(db.api(), "tab-b", 30_000);
+    first.start("version-a", "Chrome on Windows");
+    second.start("version-b", "Safari on Mac");
+    await flush();
+
+    expect(await first.requestEdit()).toBe(true);
+    expect(await second.requestEdit()).toBe(true);
+    expect(db.row("version-a")?.session_id).toBe("tab-a");
+    expect(db.row("version-b")?.session_id).toBe("tab-b");
+  });
+
   it("shows the banner to other sessions within one poll, without them trying to edit", async () => {
     const db = fakeDatabase();
     const laptop = new EditLockController(db.api(), "laptop", 30_000);
     const office = new EditLockController(db.api(), "office", 30_000);
-    office.start("Safari on Mac");
+    office.start("v1", "Safari on Mac");
     await flush();
     expect(office.getState().otherHolder).toBeNull();
 
-    laptop.start("Chrome on Windows");
+    laptop.start("v1", "Chrome on Windows");
     await laptop.requestEdit();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(office.getState().otherHolder?.session_id).toBe("laptop");
@@ -73,8 +91,8 @@ describe("EditLockController", () => {
     const db = fakeDatabase();
     const laptop = new EditLockController(db.api(), "laptop", 30_000);
     const office = new EditLockController(db.api(), "office", 30_000);
-    laptop.start("Chrome on Windows");
-    office.start("Safari on Mac");
+    laptop.start("v1", "Chrome on Windows");
+    office.start("v1", "Safari on Mac");
     await laptop.requestEdit();
     await office.requestEdit();
 
@@ -91,20 +109,19 @@ describe("EditLockController", () => {
   it("keeps the lock alive with heartbeats, so a long session is never considered stale", async () => {
     const db = fakeDatabase();
     const laptop = new EditLockController(db.api(), "laptop", 30_000);
-    laptop.start("Chrome");
+    laptop.start("v1", "Chrome");
     await laptop.requestEdit();
-    const acquiredAt = db.row()!.acquired_at;
+    const acquiredAt = db.row("v1")!.acquired_at;
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(isLockFresh(db.row()!, Date.now())).toBe(true);
-    expect(db.row()!.acquired_at).toBe(acquiredAt);
+    expect(isLockFresh(db.row("v1")!, Date.now())).toBe(true);
+    expect(db.row("v1")!.acquired_at).toBe(acquiredAt);
   });
 
   it("claims a lock abandoned for over two minutes without asking", async () => {
     const db = fakeDatabase();
-    const crashed = new EditLockController(db.api(), "crashed", 30_000);
-    await crashed.requestEdit(); // never started: no heartbeats, like a tab that was killed
+    await db.api().acquire("crashed", "v1", "Chrome", false); // abandoned tab: acquired, then stopped heartbeating
     const office = new EditLockController(db.api(), "office", 30_000);
-    office.start("Safari");
+    office.start("v1", "Safari");
     await flush();
     expect(office.getState().otherHolder?.session_id).toBe("crashed");
     expect(await office.requestEdit()).toBe(false);
@@ -120,21 +137,22 @@ describe("EditLockController", () => {
     const laptop = new EditLockController(api, "laptop", 30_000);
     await laptop.requestEdit();
     await laptop.stopEditing();
-    expect(db.row()).toBeNull();
+    expect(db.row("v1")).toBeNull();
 
     const pageHide = new Map<string, () => void>();
     vi.stubGlobal("window", { addEventListener: (type: string, fn: () => void) => pageHide.set(type, fn), removeEventListener: () => undefined });
     try {
-      laptop.start("Chrome");
+      laptop.start("v1", "Chrome");
       await laptop.requestEdit();
       pageHide.get("pagehide")!();
-      expect(api.releasedOnUnload).toEqual(["laptop"]);
+      expect(api.releasedOnUnload).toEqual(["laptop:v1"]);
     } finally { vi.unstubAllGlobals(); }
   });
 
   it("reports network errors without pretending to hold the lock", async () => {
     const api: EditLockApi = { ...fakeDatabase().api(), acquire: async () => { throw new Error("Failed to fetch"); } };
     const laptop = new EditLockController(api, "laptop", 30_000);
+    laptop.start("v1", "Chrome");
     expect(await laptop.requestEdit()).toBe(false);
     expect(laptop.getState()).toMatchObject({ mode: "viewing", error: "Could not start editing: Failed to fetch" });
   });
@@ -143,9 +161,9 @@ describe("EditLockController", () => {
     const db = fakeDatabase();
     const api = db.api();
     let offline = false;
-    const flaky: EditLockApi = { ...api, heartbeat: (id) => offline ? Promise.reject(new Error("offline")) : api.heartbeat(id) };
+    const flaky: EditLockApi = { ...api, heartbeat: (id, versionId) => offline ? Promise.reject(new Error("offline")) : api.heartbeat(id, versionId) };
     const laptop = new EditLockController(flaky, "laptop", 30_000);
-    laptop.start("Chrome");
+    laptop.start("v1", "Chrome");
     await laptop.requestEdit();
     offline = true;
     await vi.advanceTimersByTimeAsync(30_000);
@@ -157,12 +175,13 @@ describe("EditLockController", () => {
 
   it("notifies subscribers on every change", async () => {
     const laptop = new EditLockController(fakeDatabase().api(), "laptop", 30_000);
+    laptop.start("v1", "Chrome");
     const seen: string[] = [];
     const unsubscribe = laptop.subscribe(() => seen.push(laptop.getState().mode));
     await laptop.requestEdit();
     unsubscribe();
     await laptop.stopEditing();
-    expect(seen).toEqual(["acquiring", "editing"]);
+    expect(seen).toEqual(["viewing", "acquiring", "editing"]);
   });
 });
 

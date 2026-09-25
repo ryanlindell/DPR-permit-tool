@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "security:public": "node scripts/security-smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

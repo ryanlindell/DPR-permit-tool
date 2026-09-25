@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { countVersionPermits, createVersion, deleteVersion, renameVersion, switchVersion } from "../../data/versions";
+import { countVersionPermits, createVersion, deleteVersion, renameVersion } from "../../data/versions";
 import type { Version } from "../../types";
 import { cleanVersionName, suggestVersionName, versionErrorMessage, versionNameError } from "./versionNames";
 import "./versions.css";
@@ -9,21 +9,25 @@ export interface VersionMenuProps {
   activeVersionId: string;
   /** True when this session may not change versions (e.g. another device holds the edit lock). */
   readOnly: boolean;
+  /** Disable selection while an edit-lock acquisition is in flight. */
+  selectionDisabled?: boolean;
   /** Reload settings, versions, and permits after any change. Rejects if the reload fails. */
   onChanged: () => Promise<void>;
+  /** Selects the version displayed by this browser session; does not change other sessions. */
+  onSelectVersion: (versionId: string) => void;
 }
 
 type Dialog =
   | { kind: "saveAs" }
   | { kind: "rename"; version: Version }
-  | { kind: "delete"; version: Version; permitCount: number | null };
+  | { kind: "delete"; version: Version; permitCount: number | null; permitCountError: string | null };
 
 /**
  * Top-bar menu for versions ("saves"): shows the active version, and offers Save as new version,
  * switch, rename, and delete. Every change goes through src/data/versions.ts and then calls
  * onChanged so the app reloads permits and conflicts for whichever version is now active.
  */
-export function VersionMenu({ versions, activeVersionId, readOnly, onChanged }: VersionMenuProps) {
+export function VersionMenu({ versions, activeVersionId, readOnly, selectionDisabled = false, onChanged, onSelectVersion }: VersionMenuProps) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,17 +63,20 @@ export function VersionMenu({ versions, activeVersionId, readOnly, onChanged }: 
 
   async function handleSwitch(version: Version) {
     setOpen(false);
-    await run(`Switching to ${version.name}…`, () => switchVersion(version.id));
+    await run(`Showing ${version.name}…`, async () => onSelectVersion(version.id));
   }
 
   async function openDelete(version: Version) {
     setOpen(false);
-    setDialog({ kind: "delete", version, permitCount: null });
+    setDialog({ kind: "delete", version, permitCount: null, permitCountError: null });
     try {
       const permitCount = await countVersionPermits(version.id);
       setDialog((current) => current?.kind === "delete" && current.version.id === version.id ? { ...current, permitCount } : current);
-    } catch {
-      // The count is informational; the dialog still works without it.
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setDialog((current) => current?.kind === "delete" && current.version.id === version.id
+        ? { ...current, permitCountError: `Could not load the permit count: ${message}` }
+        : current);
     }
   }
 
@@ -81,7 +88,8 @@ export function VersionMenu({ versions, activeVersionId, readOnly, onChanged }: 
 
       {open && (
         <div className="version-menu__panel" role="menu" aria-label="Versions">
-          {readOnly && <p className="version-menu__note">Versions can't be changed while another device is editing.</p>}
+          <p className="version-menu__note">Versions save permit schedules. Field names and map shapes are shared across all versions.</p>
+          {readOnly && <p className="version-menu__note">You can switch the displayed version anytime. Save, rename, and delete require edit mode for this version.</p>}
           <button type="button" role="menuitem" className="version-menu__save" disabled={readOnly} onClick={() => { setOpen(false); setError(null); setDialog({ kind: "saveAs" }); }}>
             Save as new version…
           </button>
@@ -95,7 +103,7 @@ export function VersionMenu({ versions, activeVersionId, readOnly, onChanged }: 
                     <small>{isActive ? "Active" : `Saved ${new Date(version.created_at).toLocaleDateString()}`}</small>
                   </div>
                   <div className="version-menu__actions">
-                    {!isActive && <button type="button" role="menuitem" disabled={readOnly} onClick={() => void handleSwitch(version)}>Switch</button>}
+                    {!isActive && <button type="button" role="menuitem" disabled={selectionDisabled} onClick={() => void handleSwitch(version)}>Switch</button>}
                     <button type="button" role="menuitem" disabled={readOnly} aria-label={`Rename ${version.name}`} onClick={() => { setOpen(false); setError(null); setDialog({ kind: "rename", version }); }}>Rename</button>
                     {!isActive && <button type="button" role="menuitem" className="danger-button" disabled={readOnly} aria-label={`Delete ${version.name}`} onClick={() => void openDelete(version)}>Delete</button>}
                   </div>
@@ -122,7 +130,12 @@ export function VersionMenu({ versions, activeVersionId, readOnly, onChanged }: 
           versions={versions}
           onCancel={() => setDialog(null)}
           onSubmit={async (name) => {
-            const problem = await run(`Saving ${name}…`, () => createVersion(name, active.id));
+            let created: Version | null = null;
+            const problem = await run(`Saving ${name}…`, async () => {
+              created = await createVersion(name, active.id);
+              onSelectVersion(created.id);
+              return created;
+            });
             if (!problem) setDialog(null);
             return problem;
           }}
@@ -149,6 +162,7 @@ export function VersionMenu({ versions, activeVersionId, readOnly, onChanged }: 
         <ConfirmDeleteDialog
           version={dialog.version}
           permitCount={dialog.permitCount}
+          permitCountError={dialog.permitCountError}
           onCancel={() => setDialog(null)}
           onConfirm={async () => {
             const problem = await run(`Deleting ${dialog.version.name}…`, () => deleteVersion(dialog.version.id));
@@ -206,7 +220,7 @@ function VersionNameDialog({ title, description, submitLabel, initialName, versi
   );
 }
 
-function ConfirmDeleteDialog({ version, permitCount, onCancel, onConfirm }: { version: Version; permitCount: number | null; onCancel: () => void; onConfirm: () => Promise<string | null> }) {
+function ConfirmDeleteDialog({ version, permitCount, permitCountError, onCancel, onConfirm }: { version: Version; permitCount: number | null; permitCountError: string | null; onCancel: () => void; onConfirm: () => Promise<string | null> }) {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const permits = permitCount === null ? "its permits" : permitCount === 1 ? "its 1 permit" : `its ${permitCount} permits`;
@@ -223,6 +237,7 @@ function ConfirmDeleteDialog({ version, permitCount, onCancel, onConfirm }: { ve
       <section className="version-dialog" role="alertdialog" aria-modal="true" aria-labelledby="version-delete-title" aria-describedby="version-delete-body">
         <h2 id="version-delete-title">Delete "{version.name}"?</h2>
         <p id="version-delete-body">This permanently deletes the version and {permits}. Other versions are not affected. This can't be undone.</p>
+        {permitCountError && <p className="error" role="alert">{permitCountError}</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <div className="version-dialog__actions">
           <button type="button" autoFocus onClick={onCancel} disabled={deleting}>Cancel</button>

@@ -9,19 +9,19 @@ import { requireSupabase, supabase, supabaseConfig } from "./supabaseClient";
  * The holder proves it is still alive with a heartbeat; a lock whose heartbeat is older than
  * `editLockStaleAfterSeconds` is treated as abandoned and can be taken without asking.
  */
-export interface EditLock { owner_id: string; session_id: string; holder_label: string; heartbeat_at: string; acquired_at: string; }
+export interface EditLock { owner_id: string; version_id: string; session_id: string; holder_label: string; heartbeat_at: string; acquired_at: string; }
 
-export async function getEditLock(): Promise<EditLock | null> {
-  const { data, error } = await requireSupabase().from("edit_locks").select("*").maybeSingle(); if (error) throw error; return data as EditLock | null;
+export async function getEditLock(versionId: string): Promise<EditLock | null> {
+  const { data, error } = await requireSupabase().from("edit_locks").select("*").eq("version_id", versionId).maybeSingle(); if (error) throw error; return data as EditLock | null;
 }
-export async function acquireEditLock(sessionId: string, label: string, force = false): Promise<boolean> {
-  const { data, error } = await requireSupabase().rpc("acquire_edit_lock", { p_session_id: sessionId, p_label: label, p_force: force }); if (error) throw error; return data as boolean;
+export async function acquireEditLock(sessionId: string, versionId: string, label: string, force = false): Promise<boolean> {
+  const { data, error } = await requireSupabase().rpc("acquire_edit_lock", { p_session_id: sessionId, p_version_id: versionId, p_label: label, p_force: force }); if (error) throw error; return data as boolean;
 }
-export async function heartbeatEditLock(sessionId: string): Promise<boolean> {
-  const { data, error } = await requireSupabase().rpc("heartbeat_edit_lock", { p_session_id: sessionId }); if (error) throw error; return data as boolean;
+export async function heartbeatEditLock(sessionId: string, versionId: string): Promise<boolean> {
+  const { data, error } = await requireSupabase().rpc("heartbeat_edit_lock", { p_session_id: sessionId, p_version_id: versionId }); if (error) throw error; return data as boolean;
 }
-export async function releaseEditLock(sessionId: string): Promise<void> {
-  const { error } = await requireSupabase().rpc("release_edit_lock", { p_session_id: sessionId }); if (error) throw error;
+export async function releaseEditLock(sessionId: string, versionId: string): Promise<void> {
+  const { error } = await requireSupabase().rpc("release_edit_lock", { p_session_id: sessionId, p_version_id: versionId }); if (error) throw error;
 }
 
 /** True while the holder's last heartbeat is recent enough that the lock still counts. */
@@ -51,12 +51,12 @@ export function describeBrowser(userAgent: string): string {
 
 /** The database calls the controller needs; injected so tests can supply fakes. */
 export interface EditLockApi {
-  acquire(sessionId: string, label: string, force: boolean): Promise<boolean>;
-  heartbeat(sessionId: string): Promise<boolean>;
-  release(sessionId: string): Promise<void>;
-  get(): Promise<EditLock | null>;
+  acquire(sessionId: string, versionId: string, label: string, force: boolean): Promise<boolean>;
+  heartbeat(sessionId: string, versionId: string): Promise<boolean>;
+  release(sessionId: string, versionId: string): Promise<void>;
+  get(versionId: string): Promise<EditLock | null>;
   /** Fire-and-forget release that survives the tab closing. */
-  releaseOnUnload(sessionId: string): void;
+  releaseOnUnload(sessionId: string, versionId: string): void;
 }
 
 export interface EditLockState {
@@ -86,7 +86,8 @@ export class EditLockController {
   /** Every lock operation runs in order, so a heartbeat can never interleave with a take-over. */
   private queue: Promise<unknown> = Promise.resolve();
   private label = "another device";
-  private readonly onPageHide = () => { if (this.state.mode === "editing") this.api.releaseOnUnload(this.sessionId); };
+  private readonly onPageHide = () => { if (this.state.mode === "editing" && this.versionId) this.api.releaseOnUnload(this.sessionId, this.versionId); };
+  private versionId: string | null = null;
   private readonly api: EditLockApi;
   private readonly intervalMs: number;
 
@@ -100,8 +101,9 @@ export class EditLockController {
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
 
   /** Begin watching the lock (for the banner) and heartbeating while editing. */
-  start(label: string): void {
+  start(versionId: string | null, label: string): void {
     this.label = label;
+    this.versionId = versionId;
     if (this.timer) return;
     this.timer = setInterval(() => { void this.tick(); }, this.intervalMs);
     if (typeof window !== "undefined") window.addEventListener("pagehide", this.onPageHide);
@@ -110,10 +112,18 @@ export class EditLockController {
 
   /** Stop timers and give the lock back (used when the main app unmounts, e.g. on sign-out). */
   stop(): Promise<void> {
+    const versionId = this.versionId;
+    const wasEditing = this.state.mode === "editing";
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (typeof window !== "undefined") window.removeEventListener("pagehide", this.onPageHide);
-    return this.stopEditing();
+    if (wasEditing) this.set({ mode: "viewing", otherHolder: null, notice: null });
+    return this.enqueue(async () => {
+      if (wasEditing && versionId) {
+        try { await this.api.release(this.sessionId, versionId); }
+        catch { /* A missed release expires automatically after two minutes. */ }
+      }
+    });
   }
 
   /** Try to enter edit mode. Resolves true when this tab now holds the lock. */
@@ -123,10 +133,12 @@ export class EditLockController {
   takeOver(): Promise<boolean> { return this.acquire(true); }
 
   stopEditing(): Promise<void> {
+    const versionId = this.versionId;
+    const wasEditing = this.state.mode === "editing";
+    if (wasEditing) this.set({ mode: "viewing", notice: null });
     return this.enqueue(async () => {
-      if (this.state.mode !== "editing") return;
-      this.set({ mode: "viewing", notice: null });
-      try { await this.api.release(this.sessionId); }
+      if (!wasEditing) return;
+      try { if (versionId) await this.api.release(this.sessionId, versionId); }
       catch { /* Best effort: an unreleased lock goes stale by itself after two minutes. */ }
     });
   }
@@ -136,13 +148,15 @@ export class EditLockController {
   private acquire(force: boolean): Promise<boolean> {
     return this.enqueue(async () => {
       if (this.state.mode === "editing") return true;
+      const versionId = this.versionId;
+      if (!versionId) return false;
       this.set({ mode: "acquiring", error: null, notice: null });
       try {
-        if (await this.api.acquire(this.sessionId, this.label, force)) {
+        if (await this.api.acquire(this.sessionId, versionId, this.label, force)) {
           this.set({ mode: "editing", otherHolder: null });
           return true;
         }
-        this.set({ mode: "viewing", otherHolder: await this.api.get() });
+        this.set({ mode: "viewing", otherHolder: await this.api.get(versionId) });
         return false;
       } catch (error) {
         this.set({ mode: "viewing", error: `Could not start editing: ${messageOf(error)}` });
@@ -153,15 +167,17 @@ export class EditLockController {
 
   private tick(): Promise<void> {
     return this.enqueue(async () => {
+      const versionId = this.versionId;
+      if (!versionId) { this.set({ otherHolder: null }); return; }
       try {
         if (this.state.mode === "editing") {
-          if (await this.api.heartbeat(this.sessionId)) { this.set({ error: null }); return; }
+          if (await this.api.heartbeat(this.sessionId, versionId)) { this.set({ error: null }); return; }
           // Another device took over (or our lock went stale and was claimed): drop to read-only.
-          const holder = await this.api.get();
+          const holder = await this.api.get(versionId);
           this.set({ mode: "viewing", otherHolder: holder, error: null, notice: "Another device took over editing. This view is now read-only." });
           return;
         }
-        const lock = await this.api.get();
+        const lock = await this.api.get(versionId);
         const other = lock && lock.session_id !== this.sessionId && isLockFresh(lock, Date.now()) ? lock : null;
         this.set({ otherHolder: other, error: null });
       } catch (error) {
@@ -190,18 +206,18 @@ async function rememberAccessToken() {
 }
 
 const supabaseLockApi: EditLockApi = {
-  async acquire(sessionId, label, force) { const won = await acquireEditLock(sessionId, label, force); await rememberAccessToken(); return won; },
-  async heartbeat(sessionId) { const alive = await heartbeatEditLock(sessionId); await rememberAccessToken(); return alive; },
+  async acquire(sessionId, versionId, label, force) { const won = await acquireEditLock(sessionId, versionId, label, force); await rememberAccessToken(); return won; },
+  async heartbeat(sessionId, versionId) { const alive = await heartbeatEditLock(sessionId, versionId); await rememberAccessToken(); return alive; },
   release: releaseEditLock,
   get: getEditLock,
-  releaseOnUnload(sessionId) {
+  releaseOnUnload(sessionId, versionId) {
     if (!supabase || !cachedAccessToken) return;
     // keepalive lets the request finish after the tab is gone; supabase-js cannot do that.
     void fetch(`${supabaseConfig.url}/rest/v1/rpc/release_edit_lock`, {
       method: "POST",
       keepalive: true,
       headers: { "Content-Type": "application/json", apikey: supabaseConfig.publishableKey, Authorization: `Bearer ${cachedAccessToken}` },
-      body: JSON.stringify({ p_session_id: sessionId }),
+      body: JSON.stringify({ p_session_id: sessionId, p_version_id: versionId }),
     }).catch(() => undefined);
   },
 };

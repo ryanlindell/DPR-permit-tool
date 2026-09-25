@@ -1,14 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { isSupabaseConfigured, requireSupabase } from "../data/supabaseClient";
+import { createAccountWithInvite } from "../data/auth";
+import { isSupabaseConfigured } from "../data/supabaseClient";
 
 export function Signup() {
   const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); const [inviteCode, setInviteCode] = useState(""); const [error, setError] = useState(""); const [done, setDone] = useState(false); const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(""); setBusy(true);
     try {
-      const { error: invokeError } = await requireSupabase().functions.invoke("signup-with-invite", { body: { username, password, inviteCode } });
-      if (invokeError) throw invokeError;
+      await createAccountWithInvite(username, password, inviteCode);
       setDone(true);
     } catch (err) { setError(err instanceof Error ? err.message : "Could not create account."); }
     finally { setBusy(false); }

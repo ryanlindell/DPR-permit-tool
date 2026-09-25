@@ -1,0 +1,5 @@
+.lock-banners { display: grid; }
+.lock-banner { display: flex; align-items: center; gap: .75rem; padding: .5rem .9rem; background: #fff4e5; color: #5f3200; border-bottom: 1px solid #f0d2a8; font-size: .95rem; }
+.lock-banner span { flex: 1; }
+.lock-banner button { flex: none; }
+.lock-banner--error { background: #fbeeed; color: #8b2a23; border-bottom-color: #efc4c0; }

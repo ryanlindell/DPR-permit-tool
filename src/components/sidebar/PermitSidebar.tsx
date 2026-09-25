@@ -11,7 +11,8 @@ interface PermitSidebarProps {
   permits: Permit[];
   conflictsByPermit: ReadonlyMap<string, Conflict[]>;
   editMode: boolean;
-  onToggleEdit: () => void;
+  /** Omit for read-only views (the share page); the Edit button is then hidden. */
+  onToggleEdit?: () => void;
   onClose: () => void;
   onExpandCalendar: () => void;
   onSavePermit: (permit: Permit) => Promise<void>;
@@ -50,7 +51,7 @@ export function PermitSidebar(props: PermitSidebarProps) {
         </header>
         <div className="permit-sidebar__toolbar">
           <button type="button" onClick={onExpandCalendar}>Expand to calendar</button>
-          <button type="button" aria-pressed={editMode} className={editMode ? "primary" : ""} onClick={onToggleEdit}>{editMode ? "Done editing" : "Edit permits"}</button>
+          {onToggleEdit && <button type="button" aria-pressed={editMode} className={editMode ? "primary" : ""} onClick={onToggleEdit}>{editMode ? "Done editing" : "Edit permits"}</button>}
         </div>
         {actionError && <p className="permit-sidebar__error" role="alert">{actionError}</p>}
         <div className="permit-sidebar__content">

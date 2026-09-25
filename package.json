@@ -17,6 +17,7 @@
     "@turf/helpers": "^7.2.0",
     "@turf/intersect": "^7.2.0",
     "leaflet": "^1.9.4",
+    "exceljs": "^4.4.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",

@@ -1,0 +1,11 @@
+/* Presentation sizing for the share route: components size text in rem, so this scales them all. */
+html.presentation-mode { font-size: 20px; }
+@media (max-width: 900px) { html.presentation-mode { font-size: 17px; } }
+
+.topbar.share-topbar { gap: .75rem; }
+.topbar.share-topbar strong { margin-right: 0; font-size: 1.15rem; }
+.share-badge { padding: .15rem .55rem; border-radius: 999px; background: #e7f1ec; color: #155c44; font-size: .8rem; font-weight: 700; letter-spacing: .02em; }
+.share-meta { margin-left: auto; color: #596673; font-size: .85rem; }
+.share-warning { color: #8a3a12; font-weight: 600; }
+.share-message { width: min(560px, calc(100% - 32px)); margin: 12vh auto; padding: 2rem; background: white; border: 1px solid #dce2e8; border-radius: 10px; box-shadow: 0 8px 26px #14212d12; line-height: 1.5; }
+.share-message h1 { margin-top: 0; font-size: 1.5rem; }

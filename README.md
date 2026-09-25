@@ -16,7 +16,7 @@ A small permit scheduling app for a parks department. The first release provides
 1. Create a Supabase project and save its URL and publishable key. The Edge Function's privileged key is provided by Supabase at runtime and must never be put in frontend code.
 2. In **Authentication → Providers → Email**, disable **Confirm email**. Accounts use synthetic email addresses and cannot receive reset messages.
 3. In **Authentication → Settings**, disable public email signups. Users are created only by the invite Edge Function using the server-side admin API.
-4. In **SQL Editor**, run the files in `supabase/migrations/` in filename order: `20260924000100_schema_and_rls.sql`, `20260924000200_rpc_functions.sql`, `20260924000300_zoom_home_view_in.sql`, then `20260924000400_default_home_zoom_20.sql`. Run each whole file once and wait for the success result before continuing.
+4. In **SQL Editor**, run the files in `supabase/migrations/` in filename order: `20260924000100_schema_and_rls.sql`, `20260924000200_rpc_functions.sql`, `20260924000300_zoom_home_view_in.sql`, `20260924000400_default_home_zoom_20.sql`, then `20260925000100_edit_lock_acquired_at.sql`. On an existing project, run only the files you have not run yet. Run each whole file once and wait for the success result before continuing.
 5. Deploy `signup-with-invite` from **Edge Functions → Deploy a new function → Via Editor**. Name it exactly `signup-with-invite` and paste the contents of `supabase/functions/signup-with-invite/index.ts`. Supabase injects the function's `SUPABASE_URL` and legacy `SUPABASE_SERVICE_ROLE_KEY` environment values. Keep the service key out of the repo and browser. The Dashboard editor is intended for quick setup; keep the source of truth in this repository.
 6. Create an invite code in **Table Editor → invite_codes → Insert row**. Enter a unique `code` and positive `uses_remaining`, for example `FIELD-STAFF-2026` and `3`. This table has RLS enabled and no client policies; only the Edge Function can consume codes.
 7. Open the app, choose **Create an account**, and enter a username, password (at least 8 characters), and invite code. After the success message, sign in with that username and password. The app maps the username internally to `<lowercase-username>@users.fieldpermits.invalid`.
@@ -31,6 +31,12 @@ After creating two accounts, sign into each in a separate browser profile. In ea
 ## Password resets
 
 Synthetic addresses cannot receive email. An administrator must reset a user's password in **Supabase Dashboard → Authentication → Users** using the dashboard's password update/reset controls.
+
+## Sharing and the edit lock
+
+**Share link.** In **Settings**, turn on **Enable share link** and click **Copy link**. Anyone with the link sees the current schedule (map, conflict colors, sidebar, calendar) but cannot change anything. The page checks for changes every 15 seconds, so it can stay on a projector during the meeting while someone edits on another computer. Turning sharing off, or clicking **Regenerate link**, makes the old link show "This schedule isn't available" within 15 seconds.
+
+**One editor at a time.** Only one browser can be in edit mode per account. If a second computer signed in to the same account tries to edit, it shows "Being edited on another device since…" and stays view-only. **Take over editing** moves edit mode to that computer; the first one switches to view-only within about 30 seconds. If the editing computer is closed or loses its connection, edit mode frees up by itself after two minutes.
 
 ## GitHub Pages deployment
 

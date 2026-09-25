@@ -1,0 +1,16 @@
+.settings-dialog { width: min(600px, calc(100% - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 1.25rem 1.5rem; background: white; border-radius: 8px; box-shadow: 0 12px 40px #0003; display: grid; gap: 1rem; }
+.settings-dialog__header, .settings-dialog__footer { display: flex; align-items: center; justify-content: space-between; }
+.settings-dialog__footer { justify-content: flex-end; }
+.settings-dialog__header h2 { margin: 0; font-size: 1.3rem; }
+.settings-section { display: grid; gap: .75rem; padding-top: .25rem; }
+.settings-section h3 { margin: 0; font-size: 1.05rem; }
+.settings-help { margin: 0; color: #596673; font-size: .9rem; line-height: 1.45; }
+.settings-toggle { display: flex; align-items: center; gap: .55rem; font-weight: 600; cursor: pointer; }
+.settings-toggle input { width: 1.15rem; height: 1.15rem; accent-color: #176e52; }
+.share-link { display: grid; gap: .35rem; }
+.share-link > label { font-size: .85rem; font-weight: 600; color: #3d4a57; }
+.share-link__row { display: flex; gap: .5rem; }
+.share-link__row input { flex: 1; min-width: 0; padding: .5rem .6rem; border: 1px solid #cbd3dc; border-radius: 5px; font: inherit; font-size: .9rem; background: #f6f8fa; }
+.share-link.is-off input { color: #8a96a3; text-decoration: line-through; }
+.settings-row { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.settings-dialog button.primary { background: #176e52; border-color: #176e52; color: white; }

@@ -6,7 +6,10 @@ import { PermitSidebar } from "../components/sidebar/PermitSidebar";
 import { PermitImportToolbar } from "../components/permits/PermitImportToolbar";
 import { VersionMenu } from "../components/versions/VersionMenu";
 import { computeConflicts } from "../logic/conflicts";
-import { canEdit } from "../data/lock";
+import { canEdit, describeBrowser, editLock } from "../data/lock";
+import { useEditLock } from "../components/lock/useEditLock";
+import { EditLockBanner } from "../components/lock/EditLockBanner";
+import { SettingsDialog } from "../components/settings/SettingsDialog";
 import { deletePermit, listPermits, updatePermit } from "../data/permits";
 import { listFields, listFieldOverlaps } from "../data/fields";
 import { getSettings, updateSettings } from "../data/settings";
@@ -25,7 +28,11 @@ export function MainApp({ user }: { user: User }) {
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
+  // Edit mode is holding the account's edit lock (SPEC 6.3); canEdit() reads the same state.
+  const lock = useEditLock(describeBrowser(navigator.userAgent));
+  const editMode = lock.mode === "editing";
+  const toggleEdit = useCallback(() => { void (editLock.getState().mode === "editing" ? editLock.stopEditing() : editLock.requestEdit()); }, []);
+  const [showSettings, setShowSettings] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const username = String(user.user_metadata.username ?? user.email?.split("@")[0] ?? "Account");
@@ -131,12 +138,13 @@ export function MainApp({ user }: { user: User }) {
       <strong>Field Permit Scheduler</strong>
       <span className="account-name">{username}</span>
       <VersionMenu versions={versions} activeVersionId={activeVersion.id} readOnly={!canEdit()} onChanged={reloadWorkspace} />
-      <button type="button" className={editMode ? "primary" : ""} aria-pressed={editMode} onClick={() => setEditMode((value) => !value)}>{editMode ? "Done editing" : "Edit mode"}</button>
+      <button type="button" className={editMode ? "primary" : ""} aria-pressed={editMode} onClick={toggleEdit} disabled={lock.mode === "acquiring"}>{lock.mode === "acquiring" ? "Starting…" : editMode ? "Done editing" : "Edit mode"}</button>
       <PermitImportToolbar fields={fields} permits={permits} activeVersion={activeVersion} onChanged={reloadWorkspace} />
       <button onClick={() => setShowExport(true)}>Export</button>
-      <button disabled title="Settings are coming in a later phase">Settings</button>
+      <button onClick={() => setShowSettings(true)}>Settings</button>
       <button onClick={() => void requireSupabase().auth.signOut()}>Sign out</button>
     </header>
+    <EditLockBanner state={lock} />
     <main className="workspace">
       {actionError && <div className="workspace-notice" role="alert">{actionError}<button type="button" onClick={() => setActionError(null)}>Dismiss</button></div>}
       <FieldMap
@@ -156,7 +164,7 @@ export function MainApp({ user }: { user: User }) {
         permits={sidebarPermits}
         conflictsByPermit={conflictsByPermit}
         editMode={editMode}
-        onToggleEdit={() => setEditMode((value) => !value)}
+        onToggleEdit={toggleEdit}
         onClose={() => setSelectedFieldId(null)}
         onExpandCalendar={() => setShowCalendar(true)}
         onSavePermit={savePermitOptimistically}
@@ -170,10 +178,11 @@ export function MainApp({ user }: { user: User }) {
         conflictsByPermit={conflictsByPermit}
         editable={canEdit() && editMode}
         onBack={() => setShowCalendar(false)}
-        onToggleEdit={() => setEditMode((value) => !value)}
+        onToggleEdit={toggleEdit}
         onPermitChange={savePermitOptimistically}
       />}
     </main>
+    {showSettings && <SettingsDialog settings={settings} onSettingsChange={setSettings} onClose={() => setShowSettings(false)} />}
     {showExport && <div className="modal-backdrop" role="presentation" onClick={() => setShowExport(false)}><section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title" onClick={(event) => event.stopPropagation()}><h2 id="export-title">Export</h2><p>Export formats are coming soon.</p><button onClick={() => setShowExport(false)}>Close</button></section></div>}
   </div>;
 }

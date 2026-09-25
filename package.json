@@ -11,10 +11,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.21",
+    "@fullcalendar/interaction": "^6.1.21",
+    "@fullcalendar/react": "^6.1.21",
+    "@fullcalendar/timegrid": "^6.1.21",
     "@supabase/supabase-js": "^2.57.0",
     "@turf/area": "^7.2.0",
-    "@turf/intersect": "^7.2.0",
     "@turf/helpers": "^7.2.0",
+    "@turf/intersect": "^7.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2"

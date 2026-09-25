@@ -1,0 +1,84 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, sans-serif;
+  color: #111;
+  background: #f3f3f3;
+}
+
+.bar {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid #ccc;
+}
+
+.bar h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.bar .meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  top: 0;
+}
+
+.setup {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #f3f3f3;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.setup[hidden] {
+  display: none !important;
+}
+
+.setup code {
+  font-size: 0.95em;
+}
+
+.popup {
+  max-width: 220px;
+  font-family: system-ui, sans-serif;
+}
+
+.popup img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 0.4rem;
+}
+
+.popup .date {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.popup .id {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #666;
+}
